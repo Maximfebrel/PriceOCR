@@ -1,73 +1,90 @@
-import os
-import numpy as np
 import pandas as pd
-import keras
+import torch
+from torch.utils.data import Dataset
+from PIL import Image
+from sklearn.model_selection import train_test_split
 
 
-class DataPreprocessor:
-    def __init__(self, train_csv_path, val_csv_path, test_csv_path, image_dir, image_size=(64, 64)):
-        """
-        Инициализация класса для обработки данных.
+class NumberDataset(Dataset):
+    def __init__(self, path_excel, img_dir, char2idx, transform=None, mode='train', img_width=128, img_height=32):
+        self.path_excel = path_excel
+        self.img_dir = img_dir
+        self.transform = transform
+        self.char2idx = char2idx
+        self.mode = mode
+        self.img_width = img_width
+        self.img_height = img_height
 
-        :param train_csv_path: Путь к train.csv
-        :param val_csv_path: Путь к val.csv
-        :param test_csv_path: Путь к test.csv
-        :param image_dir: Путь к директории с изображениями
-        :param image_size: Размер изображений после ресайза (ширина, высота)
-        """
-        self.train_csv_path = train_csv_path
-        self.val_csv_path = val_csv_path
-        self.test_csv_path = test_csv_path
-        self.image_dir = image_dir
-        self.im_size = image_size
+        self.samples = []
 
-    def load_data(self):
-        """
-        Загрузка данных из CSV-файлов и преобразование их в формат, подходящий для обучения.
+        self._load_data()
 
-        :return: X_train, y_train, X_val, X_test
-        """
-        # Загрузка данных из CSV
-        train_df = pd.read_csv(self.train_csv_path)
-        val_df = pd.read_csv(self.val_csv_path)
-        test_df = pd.read_csv(self.test_csv_path)
+    def _load_data(self):
+        match self.mode:
+            case 'train':
+                train_data = pd.read_csv(self.path_excel)
 
-        # Преобразование путей к полным путям к изображениям
-        train_df['img_name'] = train_df['img_name'].apply(lambda x: os.path.join(self.image_dir, x))
-        val_df = val_df['img_name'].apply(lambda x: os.path.join(self.image_dir, x))
-        test_df['img_name'] = test_df['img_name'].apply(lambda x: os.path.join(self.image_dir, x))
+                for _, row in train_data.iterrows():
+                    label = str(int(row['text']))
+                    self.samples.append((self.img_dir + row['img_name'], label))
+            case 'train_train':
+                train_data = pd.read_csv(self.path_excel)
 
-        # Загрузка изображений и их меток
-        X_train, y_train = self._load_images_and_labels(train_df)
-        X_val, _ = self._load_images_and_labels(val_df)
-        X_test, _ = self._load_images_and_labels(test_df)
+                train_data, _ = train_test_split(train_data, test_size=0.1, random_state=24)
 
-        return X_train, y_train, X_val, X_test
+                for _, row in train_data.iterrows():
+                    label = str(int(row['text']))
+                    self.samples.append((self.img_dir+row['img_name'], label))
+            case 'train_val':
+                train_data = pd.read_csv(self.path_excel)
 
-    def _load_images_and_labels(self, df):
-        """
-        Внутренний метод для загрузки изображений и меток.
+                _, val_data = train_test_split(train_data, test_size=0.1, random_state=24)
 
-        :param df: DataFrame с путями к изображениям и метками
-        :return: Массив изображений и массив меток
-        """
+                for _, row in val_data.iterrows():
+                    label = str(int(row['text']))
+                    self.samples.append((self.img_dir+row['img_name'], label))
+            case 'val':
+                val_data = pd.read_csv(self.path_excel)
+            case 'test':
+                test_data = pd.read_csv(self.path_excel)
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        img_path, label = self.samples[idx]
+
+        try:
+            # Загрузка и проверка изображения
+            image = Image.open(img_path).convert('L')  # Конвертация в градации серого
+
+            # Применение трансформаций с проверкой размера
+            if self.transform:
+                image = self.transform(image)
+                if image.size() != (1, self.img_height, self.img_width):
+                    raise ValueError(f"Invalid image size after transform: {image.size()}")
+
+            # Преобразование метки в тензор
+            target = [self.char2idx[c] for c in label]
+            return {
+                'image': image,
+                'target': torch.tensor(target, dtype=torch.long),
+                'target_length': torch.tensor([len(target)], dtype=torch.long)
+            }
+        except Exception as e:
+            print(f"Error loading {img_path}: {str(e)}")
+            return self.__getitem__((idx + 1) % self.__len__())
+
+    @staticmethod
+    def collate_fn(batch):
+        """Кастомная функция для объединения примеров в батч"""
         images = []
-        labels = []
-        if isinstance(df, pd.DataFrame):
-            for _, row in df.iterrows():
-                image_path = row['img_name']
-                if 'text' in df.columns:
-                    label = str(row['text'])  # Преобразуем цену в строку
-                    labels.append(label)
+        targets = []
+        target_lengths = []
 
-                # Чтение изображения и изменение размера
-                image = keras.preprocessing.image.load_img(image_path, target_size=self.im_size, color_mode='grayscale')
-                image = keras.preprocessing.image.img_to_array(image) / 255.0  # Нормализация значений пикселей
-                images.append(image)
-        else:
-            for image_path in list(df):
-                image = keras.preprocessing.image.load_img(image_path, target_size=self.im_size, color_mode='grayscale')
-                image = keras.preprocessing.image.img_to_array(image) / 255.0  # Нормализация значений пикселей
-                images.append(image)
+        for item in batch:
+            images.append(item['image'])
+            targets.append(item['target'])
+            target_lengths.append(item['target_length'])
 
-        return np.array(images), labels
+        return [torch.stack(images), torch.cat(targets), torch.cat(target_lengths)]
