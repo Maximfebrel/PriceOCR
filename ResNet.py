@@ -3,9 +3,14 @@ import torch
 
 
 class ResNetCRNN(nn.Module):
-    """Архитектура с использованием предобученного ResNet в качестве энкодера"""
+    """Архитектура с использованием предобученного ResNet18 в качестве энкодера"""
 
-    def __init__(self, num_chars, hidden_size=256):
+    def __init__(self, num_chars: int, hidden_size=256):
+        """
+
+        :param num_chars: количество распознаваемых символов
+        :param hidden_size: размер скрытого слоя для рекуррентной сети
+        """
         super().__init__()
         # Используем предобученный ResNet
         base_model = torch.hub.load('pytorch/vision', 'resnet18', pretrained=True)
@@ -40,9 +45,14 @@ class ResNetCRNN(nn.Module):
         )
 
         # Классификатор
-        self.fc = nn.Linear(hidden_size * 2, num_chars)  # +1 для CTC blank
+        self.fc = nn.Linear(hidden_size * 2, num_chars)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
+        """
+        Функция для прямого прохода нейронной сети
+        :param x: вход нейронной сети
+        :return:
+        """
         # Энкодинг изображения
         x = self.encoder(x)  # [batch, 512, h, w]
         x = self.adaptive_pool(x)  # [batch, 512, 1, seq_len]
