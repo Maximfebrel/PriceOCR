@@ -108,7 +108,7 @@ class Model:
         plt.title(self.model_type)
         plt.ylabel('CTC')
         plt.xlabel('Epoch')
-        plt.savefig('loss.png')
+        plt.savefig('result/loss.png')
 
     def evaluate(self, dataloader: DataLoader, idx2char: dict) -> tuple:
         """
