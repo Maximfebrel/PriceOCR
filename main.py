@@ -19,7 +19,7 @@ transform = T.Compose([
 
 # выбор вида модели
 model_types = ['EasyOCR', 'EasyOCR_learn', 'ResNet', 'CRNN', 'CNN']
-model_type = model_types[4]
+model_type = model_types[3]
 
 if model_type not in ['EasyOCR', 'EasyOCR_learn']:
     # загрузка тренировочного датасета

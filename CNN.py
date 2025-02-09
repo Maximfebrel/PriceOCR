@@ -70,7 +70,7 @@ class CRNN(nn.Module):
         # рекуррентный слой
         self.lstm = nn.LSTM(input_size=1024, hidden_size=hidden_size, bidirectional=True, num_layers=2)
         # полносвязный слой
-        self.fc = nn.Linear(1024, num_chars)
+        self.fc = nn.Linear(512, num_chars)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
