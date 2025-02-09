@@ -4,7 +4,7 @@ from jiwer import cer
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
-from CNN import CNN, CRNN
+from architecture.CNN import CNN, CRNN
 
 
 class Model:

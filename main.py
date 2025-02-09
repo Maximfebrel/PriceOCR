@@ -18,8 +18,8 @@ transform = T.Compose([
 ])
 
 # выбор вида модели
-model_types = ['EasyOCR', 'EasyOCR_learn', 'ResNet', 'CRNN', 'CNN']
-model_type = model_types[2]
+model_types = ['EasyOCR', 'CRNN', 'CNN']
+model_type = model_types[1]
 
 if model_type not in ['EasyOCR', 'EasyOCR_learn']:
     # загрузка тренировочного датасета
@@ -47,26 +47,27 @@ if model_type not in ['EasyOCR', 'EasyOCR_learn']:
     test = model.predict(test_loader, idx2char)
     test_dataset.to_csv(test, model_type)
 else:
-    if model_type != 'EasyOCR_learn':
-        # загрузка тренировочного датасета
-        dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
-        dataloader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=dataset.collate_fn)
+    # загрузка валидационного датасета
+    dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
+    dataloader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=dataset.collate_fn)
 
-        model = EasyOCR()
-        pred = []
-        true = []
-        for image, label in dataset.samples:
-            num = model.recognize_number(image)
-            pred.append(num)
-            true.append(label)
+    # расчет метрик на предобученной модели
+    model = EasyOCR()
+    pred = []
+    true = []
+    for image, label in dataset.samples:
+        num = model.recognize_number(image)
+        pred.append(num)
+        true.append(label)
 
-        cer_score, accuracy = model.calculate_metrics(pred, true, True)
-    else:
-        ...
+    cer_score, accuracy = model.calculate_metrics(pred, true, False)
 
-    # загрузка тестового датасета
+    # выполнение предсказаний на неразмеченном датасете
     test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=True, collate_fn=test_dataset.collate_fn)
+    for image, label in test_dataset.samples:
+        num = model.recognize_number(image)
+        pred.append(num)
+    test_dataset.to_csv(pred, model_type)
 
 # вывод точности предсказаний согласно целевым метрикам
 print(f'CER: {cer_score:.4f}, Accuracy: {accuracy:.4f}')
