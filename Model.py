@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from CNN import CNN, CRNN
-from ResNet import ResNetCRNN
 
 
 class Model:
@@ -25,8 +24,6 @@ class Model:
         match model_type:
             case 'CRNN':
                 self.model = CRNN(num_chars=len(char2idx)).to(self.device)
-            case 'ResNet':
-                self.model = ResNetCRNN(num_chars=len(char2idx)).to(self.device)
             case 'CNN':
                 self.model = CNN(num_chars=len(char2idx)).to(self.device)
         # выбор лосса, используем лосс СTC
