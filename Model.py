@@ -227,6 +227,24 @@ class Model:
             sequences = ordered[:beam_width]
         return ''.join(sequences[0][0])
 
-    def predict(self, val, test):
-        ...
+    def predict(self, dataloader: DataLoader, idx2char: dict) -> list:
+        """
+        Функция для осуществления предсказаний
+        :param dataloader: объект, реализующий эффективную передачу по батчам
+        :param idx2char: символы, которые распознаются на картинках
+        :return: числа с картинок
+        """
+        self.model.eval()
+        all_preds = []
 
+        with torch.no_grad():
+            for images, targets, target_lengths in dataloader:
+                images = images.to(self.device)
+                # прямой проход
+                outputs = self.model(images)
+
+                # декодировка выхода нейронной сети
+                preds = self.decode_greedy(outputs, idx2char)
+                all_preds.extend(preds)
+
+        return all_preds

@@ -37,8 +37,8 @@ class CNN(nn.Module):
         # проход через сверточные слои
         x = self.cnn(x)
         # ресайз
-        x = x.permute(3, 0, 2, 1)  # [высота изображения, batch, channels]
-        x = x.reshape(x.size(0), x.size(1), -1)  # [длина последовательности, размер батча, features]
+        x = x.permute(3, 0, 2, 1)  # [высота изображения, размер батча, каналы, признаки]
+        x = x.reshape(x.size(0), x.size(1), -1)  # [высота изображения, размер батча, признаки]
         # проход через полносвязные слои
         x = self.fc(x)
         return x
@@ -81,8 +81,8 @@ class CRNN(nn.Module):
         # проход через сверточные слои
         x = self.cnn(x)
         # ресайз
-        x = x.permute(3, 0, 2, 1)  # [width, batch, channels]
-        x = x.reshape(x.size(0), x.size(1), -1)  # [seq_len, batch, features]
+        x = x.permute(3, 0, 2, 1)  # [высота изображения, размер батча, каналы, признаки]
+        x = x.reshape(x.size(0), x.size(1), -1)  # [высота изображения, размер батча, признаки]
         # проход через рекуррентный слой
         x, _ = self.lstm(x)
         # проход через полносвязный слой
