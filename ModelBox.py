@@ -182,7 +182,7 @@ class ModelBox:
         all_preds = []
 
         with torch.no_grad():
-            for images, targets, target_lengths in dataloader:
+            for images, targets in dataloader:
                 images = images.to(self.device)
                 # прямой проход
                 outputs = self.model(images[None, :].permute(1, 0, 2, 3).type(torch.float))
