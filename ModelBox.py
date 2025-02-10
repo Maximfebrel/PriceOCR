@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score
 
-from architecture.CNN import CNNBox
+from CNN import CNNBox
 
 
 class ModelBox:
