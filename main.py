@@ -7,7 +7,26 @@ from ModelBox import ModelBox
 from EasyOCR import EasyOCR
 
 
-def run(char2idx: dict, idx2char: dict, model_type: str):
+def run(char2idx: dict,
+        idx2char: dict,
+        model_types: dict,
+        model_type: str,
+        path_train: str,
+        path_val: str,
+        path_test: str,
+        imgs: str):
+    """
+    Функция для запуска кода
+    :param model_types: словарь с моделями
+    :param imgs: путь к изображениям
+    :param char2idx: символы для распознавания
+    :param idx2char: инвертированные символы для распознавания
+    :param model_type: используемая модель
+    :param path_train: путь к тренировочному датасету
+    :param path_val: путь к валидационному датасету
+    :param path_test: путь к тестовому датасету
+    :return: распечатанные значения метрик
+    """
     # Предобработка исходных картинок (изменений размера, конвертирование в тензор, нормализация)
     transform = T.Compose([
         T.Resize((32, 128)),
@@ -17,24 +36,24 @@ def run(char2idx: dict, idx2char: dict, model_type: str):
 
     if model_type in ['CRNN', 'CNN']:
         # загрузка тренировочного датасета
-        train_dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
+        train_dataset = NumberDataset(path_train, imgs, char2idx, transform=transform, mode='train')
         train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=train_dataset.collate_fn)
 
         # выбор созданной модели
-        model = Model(char2idx, model_type, 0.01)
+        model = Model(char2idx, model_type, model_types[model_type]['lr'])
 
         # обучение модели
-        model.train(train_dataloader, idx2char, epochs=20)
+        model.train(train_dataloader, idx2char, epochs=model_types[model_type]['epochs'])
 
         # загрузка валидационного датасета
-        val_dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
+        val_dataset = NumberDataset(path_val, imgs, char2idx, transform=transform, mode='val')
         val_loader = DataLoader(val_dataset, batch_size=16, shuffle=True, collate_fn=val_dataset.collate_fn)
 
         # тестирование модели
         cer_score, accuracy = model.evaluate(val_loader, idx2char)
 
         # загрузка тестового датасета
-        test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
+        test_dataset = NumberDataset(path_test, imgs, char2idx, transform=transform, mode='test')
         test_loader = DataLoader(test_dataset, batch_size=16, shuffle=True, collate_fn=test_dataset.collate_fn)
 
         # выдача предсказаний
@@ -42,29 +61,29 @@ def run(char2idx: dict, idx2char: dict, model_type: str):
         test_dataset.to_csv(test, model_type)
     elif model_type == 'ModelBox':
         # загрузка тренировочного датасета
-        train_dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
+        train_dataset = NumberDataset(path_train, imgs, char2idx, transform=transform, mode='train')
         bounding_box, _ = train_dataset.make_box()
         train_dataloader = DataLoader(bounding_box, batch_size=64)
 
         # выбор созданной модели
-        model = ModelBox(model_type, 0.01)
-        model.train(train_dataloader, epochs=10)
+        model = ModelBox(model_type, model_types[model_type]['lr'])
+        model.train(train_dataloader, epochs=model_types[model_type]['epochs'])
 
         # валидация модели
-        val_dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
+        val_dataset = NumberDataset(path_val, imgs, char2idx, transform=transform, mode='val')
         bounding_box, target_len = val_dataset.make_box()
         val_dataloader = DataLoader(bounding_box, batch_size=1, shuffle=False)
         cer_score, accuracy = model.evaluate(val_dataloader, target_len)
 
         # тестирвование модели
-        test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
+        test_dataset = NumberDataset(path_test, imgs, char2idx, transform=transform, mode='test')
         bounding_box, target_len = test_dataset.make_box()
         test_loader = DataLoader(bounding_box, batch_size=1, shuffle=False)
         test = model.predict(test_loader, target_len)
         test_dataset.to_csv(test, model_type)
     else:
         # загрузка валидационного датасета
-        dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
+        dataset = NumberDataset(path_val, imgs, char2idx, transform=transform, mode='val')
 
         # расчет метрик на предобученной модели
         model = EasyOCR()
@@ -78,7 +97,7 @@ def run(char2idx: dict, idx2char: dict, model_type: str):
         cer_score, accuracy = model.calculate_metrics(pred, true, False)
 
         # выполнение предсказаний на неразмеченном датасете
-        test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
+        test_dataset = NumberDataset(path_test, imgs, char2idx, transform=transform, mode='test')
         pred = []
         for image, label in test_dataset.samples:
             num = model.recognize_number(image)
@@ -95,8 +114,17 @@ if __name__ == '__main__':
                 ' ': 10}  # пробел как blank
     IDX2CHAR = {v: k for k, v in CHAR2IDX.items()}
 
-    # выбор вида модели
-    MODEL_TYPES = ['EasyOCR', 'CRNN', 'CNN', 'ModelBox']
-    MODEL_TYPE = MODEL_TYPES[1]
+    PATH_TRAIN = "data/train.csv"
+    PATH_VAL = "data/val.csv"
+    PATH_TEST = "data/test.csv"
+    IMGS = "data/imgs/"
 
-    run(CHAR2IDX, IDX2CHAR, MODEL_TYPE)
+    # выбор вида модели
+    MODEL_TYPES = {'EasyOCR': {},
+                   'CRNN': {'epochs': 5, 'lr': 0.01},
+                   'CNN': {'epochs': 10, 'lr': 0.01},
+                   'ModelBox': {'epochs': 10, 'lr': 0.01}
+                   }
+    MODEL_TYPE = 'CRNN'
+
+    run(CHAR2IDX, IDX2CHAR, MODEL_TYPES, MODEL_TYPE, PATH_TRAIN, PATH_VAL, PATH_TEST, IMGS)
