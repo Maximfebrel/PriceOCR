@@ -3,17 +3,18 @@ import torch.nn as nn
 from jiwer import cer
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+import cv2
+from sklearn.metrics import accuracy_score
 
-from architecture.CNN import CNN, CRNN
+from architecture.CNN import CNN
 
 
-class Model:
+class ModelBox:
     """Функция для выбора и обучения используемой архитектуры нейронной сети"""
 
-    def __init__(self, char2idx: dict, model_type: str, lr: float):
+    def __init__(self, model_type: str, lr: float):
         """
 
-        :param char2idx: набор распознаваемых символов
         :param model_type: обучаемая архитектура (CRNN, CNN, ResNet18)
         :param lr: скорость обучения
         """
@@ -21,21 +22,16 @@ class Model:
         # выбираем архитектуру для использования графического процессора для обучения
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # выбор архитектуры
-        match model_type:
-            case 'CRNN':
-                self.model = CRNN(num_chars=len(char2idx)).to(self.device)
-            case 'CNN':
-                self.model = CNN(num_chars=len(char2idx)).to(self.device)
-        # выбор лосса, используем лосс СTC
-        self.criterion = nn.CTCLoss(blank=10)  # blank символ имеет индекс 10
+        self.model = CNN(10).to(self.device)
+        # выбор лосса, используем лосс кросс-энтропия
+        self.criterion = nn.CrossEntropyLoss()
         # выбор оптимизитора
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
-    def train(self, dataloader: DataLoader, idx2char: dict, epochs=10):
+    def train(self, dataloader: DataLoader, epochs=10):
         """
 
         :param dataloader: объект, реализующий эффективную передачу по батчам
-        :param idx2char: символы, которые распознаются на картинках
         :param epochs: количество используемых эпох
         :return: обученная модель, лосс
         """
@@ -47,68 +43,85 @@ class Model:
             all_preds = []
             all_targets = []
 
-            for batch_idx, (images, targets, target_lengths) in enumerate(dataloader):
+            for batch_idx, (images, target) in enumerate(dataloader):
                 images = images.to(self.device)
-                targets = targets.to(self.device)
+                targets = target.to(self.device)
 
                 self.optimizer.zero_grad()
 
                 # прямой проход
-                outputs = self.model(images)
+                outputs = self.model(images[None, :].permute(1, 0, 2, 3).type(torch.float))
 
-                # вычисление длины символов на входе
-                input_lengths = torch.full(
-                    size=(outputs.size(1),),
-                    fill_value=outputs.size(0),
-                    dtype=torch.long
-                )
+                targets = targets.detach().numpy()
+                targ = []
+                for jdx in range(len(targets)):
+                    _ = []
+                    for idx in range(10):
+                        if targets[jdx] == idx:
+                            _.append(1)
+                        else:
+                            _.append(0)
+                    targ.append(_)
+
+                targ = torch.tensor(targ)
 
                 # вычисление лосса
-                loss = self.criterion(
-                    outputs.log_softmax(2),
-                    targets,
-                    input_lengths,
-                    target_lengths
-                )
+                loss = self.criterion(outputs.mean(0, keepdim=True)[0], targ.type(torch.float))
 
                 # обратный проход
                 loss.backward()
                 self.optimizer.step()
 
-                # декодировка выхода нейронной сети
-                preds = self.decode_greedy(outputs, idx2char)
-
-                # преобразование тензоров в массивы
-                targets = targets.detach().numpy()
-                target_lengths = target_lengths.detach().numpy()
-
-                # комбинирование набора цифр в исходные числа
-                sum_len = 0
-                target = []
-                for target_len in target_lengths:
-                    str_target = ''
-                    for i in range(sum_len, sum_len + target_len):
-                        str_target += str_target.join(idx2char[targets[i]])
-                    target.append(str_target)
-                    sum_len = target_len
-
-                all_preds.extend(preds)
+                all_preds.extend(torch.max(outputs.mean(0, keepdim=True)[0].data, 1)[1])
                 all_targets.extend(target)
 
                 total_loss += loss.item()
 
             # вычисление целевых метрик метрик для отслеживания процесса обучения
-            cer_score, accuracy = self.calculate_metrics(all_preds, all_targets, False)
+            accuracy = accuracy_score(all_preds, all_targets)
 
             # вывод лосса и целевых метрик для отслеживания процесса обучения
-            print(f'Epoch {epoch + 1} Loss: {total_loss / len(dataloader):.4f}, Accuracy: {accuracy:.4f}, CER: {cer_score:.4f}')
+            print(f'Epoch {epoch + 1} Loss: {total_loss / len(dataloader):.4f}, Accuracy: {accuracy:.4f}')
             total_loss_list.append(total_loss / len(dataloader))
         # сохранение графика лосса
         plt.plot(total_loss_list)
         plt.title(self.model_type)
         plt.ylabel('CTC')
         plt.xlabel('Epoch')
-        plt.savefig(f'result/loss_{self.model_type}.png')
+        plt.savefig('result/loss.png')
+
+    @staticmethod
+    def detect_digits(image_path):
+        # Загрузка изображения
+        img = cv2.imread(image_path)
+        if img is None:
+            print("Ошибка загрузки изображения")
+            return
+        # Предварительная обработка изображения
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # Поиск контуров
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Фильтрация контуров и создание bounding boxes
+        digit_boxes = []
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            area = w * h
+            aspect_ratio = w / float(h)
+            # Фильтр по размеру и пропорциям
+            if area > 100 and 0.2 < aspect_ratio < 1.0:
+                digit_boxes.append((x, y, w, h))
+        # Сортировка bounding boxes слева направо
+        digit_boxes = sorted(digit_boxes, key=lambda b: b[0])
+
+        imgs = []
+        # Отрисовка bounding boxes
+        for (x, y, w, h) in digit_boxes:
+            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+
+
 
     def evaluate(self, dataloader: DataLoader, idx2char: dict) -> tuple:
         """
@@ -128,7 +141,6 @@ class Model:
                 outputs = self.model(images)
 
                 # декодировка выхода нейронной сети
-                preds = self.decode_greedy(outputs, idx2char)
 
                 targets = targets.detach().numpy()
                 target_lengths = target_lengths.detach().numpy()
@@ -170,59 +182,6 @@ class Model:
         accuracy = correct / len(targets)
 
         return cer_score, accuracy
-
-    @staticmethod
-    def decode_greedy(output: torch.Tensor, idx2char: dict) -> list:
-        """
-        Функция для декодировки выхода нейронной сети (greedy-декодирование)
-        :param output: выход нейронной сети
-        :param idx2char: распознаваемые символы
-        :return: декодированный выход нейронной сети с которым можно работать
-        """
-        # output: [длина последовательности, размер батча, количество классов]
-        output = output.permute(1, 0, 2)  # [размер батча, длина последовательности, количество классов]
-        _, max_indices = torch.max(output, 2)
-
-        # декодировка выхода нейронной сети
-        decoded_strings = []
-        for batch in max_indices:
-            chars = []
-            prev_char = None
-            for idx in batch:
-                char = idx2char[idx.item()]
-                if char != prev_char and char != ' ':
-                    chars.append(char)
-                prev_char = char
-            decoded_strings.append(''.join(chars))
-        return decoded_strings
-
-    @staticmethod
-    def decode_beam(output, idx2char, beam_width=3) -> str:
-        """
-        Функция для декодировки выхода нейронной сети (beam-декодирование)
-        :param output: выход нейронной сети
-        :param idx2char: распознаваемые символы
-        :param beam_width: количество вариантов для рассмотрения
-        :return: декодированный выход нейронной сети с которым можно работать
-        """
-        # output: [длина последовательности, размер батча, количество классов]
-        # декодирование выхода нейронной сети
-        sequences = [[[], 0.0]]
-        for step in output:
-            all_candidates = []
-            for seq, score in sequences:
-                for idx, log_prob in enumerate(step):
-                    if idx == 10:  # пропускаем blank
-                        continue
-                    char = idx2char[idx]
-                    new_seq = seq.copy()
-                    if len(new_seq) == 0 or new_seq[-1] != char:
-                        new_seq.append(char)
-                    candidate = [new_seq, score + log_prob]
-                    all_candidates.append(candidate)
-            ordered = sorted(all_candidates, key=lambda x: x[1], reverse=True)
-            sequences = ordered[:beam_width]
-        return ''.join(sequences[0][0])
 
     def predict(self, dataloader: DataLoader, idx2char: dict) -> list:
         """

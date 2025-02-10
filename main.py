@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 
 from Loader import NumberDataset
 from Model import Model
+from ModelBox import ModelBox
 from EasyOCR import EasyOCR
 
 
@@ -18,19 +19,19 @@ transform = T.Compose([
 ])
 
 # выбор вида модели
-model_types = ['EasyOCR', 'CRNN', 'CNN']
-model_type = model_types[1]
+model_types = ['EasyOCR', 'CRNN', 'CNN', 'ModelBox']
+model_type = model_types[3]
 
-if model_type not in ['EasyOCR', 'EasyOCR_learn']:
+if model_type in ['CRNN', 'CNN']:
     # загрузка тренировочного датасета
     train_dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
     train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=train_dataset.collate_fn)
 
     # выбор созданной модели
-    model = Model(char2idx, model_type, 0.005)
+    model = Model(char2idx, model_type, 0.01)
 
     # обучение модели
-    model.train(train_dataloader, idx2char, epochs=1)
+    model.train(train_dataloader, idx2char, epochs=20)
 
     # загрузка валидационного датасета
     val_dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
@@ -46,10 +47,18 @@ if model_type not in ['EasyOCR', 'EasyOCR_learn']:
     # выдача предсказаний
     test = model.predict(test_loader, idx2char)
     test_dataset.to_csv(test, model_type)
+elif model_type == 'ModelBox':
+    # загрузка тренировочного датасета
+    train_dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
+    bounding_box = train_dataset.make_box()
+    train_dataloader = DataLoader(bounding_box, batch_size=64)
+
+    # выбор созданной модели
+    model = ModelBox(model_type, 0.005)
+    model.train(train_dataloader, epochs=10)
 else:
     # загрузка валидационного датасета
     dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
-    dataloader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=dataset.collate_fn)
 
     # расчет метрик на предобученной модели
     model = EasyOCR()
@@ -64,6 +73,7 @@ else:
 
     # выполнение предсказаний на неразмеченном датасете
     test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
+    pred = []
     for image, label in test_dataset.samples:
         num = model.recognize_number(image)
         pred.append(num)
