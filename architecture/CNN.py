@@ -44,6 +44,46 @@ class CNN(nn.Module):
         return x
 
 
+class CNNBox(nn.Module):
+    """Класс, реализующий архитектуру сверточной нейронной сети"""
+
+    def __init__(self, num_chars: int):
+        """
+
+        :param num_chars: количество распознаваемых символов
+        """
+        super(CNNBox, self).__init__()
+        # сверточная сеть (Conv2D - сверточный слой, ReLU - функция активации, MaxPool2d - макспулинг,
+        # BatchNorm2d - батч норм для стабильности сети
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(128, 256, kernel_size=3, padding=1), nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(256, 512, 3, padding=1), nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+        )
+
+        # полносвязный слой
+        self.fc = nn.Linear(2048, num_chars)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Функция для прямого прохода нейронной сети
+        :param x: вход нейронной сети
+        :return: тензор, содержащий в себе информацию о содержащейся на картинке информации
+        """
+        # проход через сверточные слои
+        x = self.cnn(x)
+        # ресайз
+        x = x.view(-1, 512 * 2 * 2)
+        # проход через полносвязные слои
+        x = self.fc(x)
+        return x
+
+
 class CRNN(nn.Module):
     """Класс, реализующий архитектуру сверточной нейронной сети с учетом последовательности цифр"""
 

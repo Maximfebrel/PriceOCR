@@ -65,6 +65,7 @@ class NumberDataset(Dataset):
         :return: цифры для обучения модели
         """
         bounding_samples = []
+        target_len = []
         for image_path, label in self.samples:
             # Загрузка изображения
             img = cv2.imread(image_path)
@@ -91,6 +92,7 @@ class NumberDataset(Dataset):
 
             try:
                 i = 0
+                target_len.append(len(digit_boxes))
                 # Отрисовка bounding boxes
                 for (x, y, w, h) in digit_boxes:
                     # приведение картинок к единому размеру
@@ -98,9 +100,10 @@ class NumberDataset(Dataset):
                     # Преобразование изображения в одноканальное (черно-белое)
                     gray_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
                     bounding_samples.append((gray_image, int(label[i])))
+
             except Exception as e:
                 print(f"Error devide {str(e)}")
-        return bounding_samples
+        return bounding_samples, target_len
 
     def __len__(self):
         return len(self.samples)

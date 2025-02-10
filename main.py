@@ -50,12 +50,25 @@ if model_type in ['CRNN', 'CNN']:
 elif model_type == 'ModelBox':
     # загрузка тренировочного датасета
     train_dataset = NumberDataset("data/train.csv", "data/imgs/", char2idx, transform=transform, mode='train')
-    bounding_box = train_dataset.make_box()
+    bounding_box, _ = train_dataset.make_box()
     train_dataloader = DataLoader(bounding_box, batch_size=64)
 
     # выбор созданной модели
-    model = ModelBox(model_type, 0.005)
+    model = ModelBox(model_type, 0.01)
     model.train(train_dataloader, epochs=10)
+
+    # валидация модели
+    val_dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
+    bounding_box, target_len = val_dataset.make_box()
+    val_dataloader = DataLoader(bounding_box, batch_size=1, shuffle=False)
+    cer_score, accuracy = model.evaluate(val_dataloader, target_len)
+
+    # тестирвование модели
+    test_dataset = NumberDataset("data/test.csv", "data/imgs/", char2idx, transform=transform, mode='test')
+    bounding_box, target_len = test_dataset.make_box()
+    test_loader = DataLoader(bounding_box, batch_size=1, shuffle=False)
+    test = model.predict(test_loader, target_len)
+    test_dataset.to_csv(test, model_type)
 else:
     # загрузка валидационного датасета
     dataset = NumberDataset("data/val.csv", "data/imgs/", char2idx, transform=transform, mode='val')
