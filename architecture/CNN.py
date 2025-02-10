@@ -56,18 +56,19 @@ class CNNBox(nn.Module):
         # сверточная сеть (Conv2D - сверточный слой, ReLU - функция активации, MaxPool2d - макспулинг,
         # BatchNorm2d - батч норм для стабильности сети
         self.cnn = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(1, 64, 3, padding=1), nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1), nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(256, 512, 3, padding=1), nn.ReLU(),
-            nn.MaxPool2d(2, 2),
+            nn.Conv2d(128, 256, 3, padding=1), nn.BatchNorm2d(256), nn.ReLU(),
+            nn.Conv2d(256, 256, 3, padding=1), nn.ReLU(),
+            nn.MaxPool2d((2, 1), (2, 1)),
+            nn.Conv2d(256, 512, 3, padding=1), nn.BatchNorm2d(512), nn.ReLU(),
+            nn.MaxPool2d((2, 1), (2, 1)),
         )
 
         # полносвязный слой
-        self.fc = nn.Linear(2048, num_chars)
+        self.fc = nn.Linear(8192, num_chars)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -78,7 +79,7 @@ class CNNBox(nn.Module):
         # проход через сверточные слои
         x = self.cnn(x)
         # ресайз
-        x = x.view(-1, 512 * 2 * 2)
+        x = x.view(-1, 512 * 2 * 8)
         # проход через полносвязные слои
         x = self.fc(x)
         return x
