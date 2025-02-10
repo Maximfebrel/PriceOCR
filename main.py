@@ -59,7 +59,7 @@ def run(char2idx: dict,
         # выдача предсказаний
         test = model.predict(test_loader, idx2char)
         test_dataset.to_csv(test, model_type)
-    elif model_type == 'ModelBox':
+    elif model_type == 'CNNBox':
         # загрузка тренировочного датасета
         train_dataset = NumberDataset(path_train, imgs, char2idx, transform=transform, mode='train')
         bounding_box, _ = train_dataset.make_box()
@@ -121,10 +121,10 @@ if __name__ == '__main__':
 
     # выбор вида модели
     MODEL_TYPES = {'EasyOCR': {},
-                   'CRNN': {'epochs': 5, 'lr': 0.01},
-                   'CNN': {'epochs': 10, 'lr': 0.01},
-                   'ModelBox': {'epochs': 10, 'lr': 0.01}
+                   'CRNN': {'epochs': 20, 'lr': 0.01},
+                   'CNN': {'epochs': 20, 'lr': 0.01},
+                   'CNNBox': {'epochs': 10, 'lr': 0.01}
                    }
-    MODEL_TYPE = 'CRNN'
+    MODEL_TYPE = 'EasyOCR'
 
     run(CHAR2IDX, IDX2CHAR, MODEL_TYPES, MODEL_TYPE, PATH_TRAIN, PATH_VAL, PATH_TEST, IMGS)
